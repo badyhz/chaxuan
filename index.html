@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>深圳小区查询助手</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Lucide图标 -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        .no-scrollbar {
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;  /* Chrome, Safari and Opera */
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- 顶部 Header -->
+        <div class="bg-blue-600 text-white p-4 shadow-md sticky top-0 z-20">
+            <h1 class="text-lg font-bold flex items-center gap-2">
+                <i data-lucide="building-2" class="w-5 h-5"></i>
+                深圳小区查询助手
+            </h1>
+            <p class="text-blue-100 text-xs mt-1">数据更新：2023年11月</p>
+        </div>
+
+        <!-- 一级筛选：行政区 Tab -->
+        <div class="bg-white shadow-sm sticky top-[76px] z-10 overflow-x-auto no-scrollbar">
+            <div id="district-tabs" class="flex px-2 py-2 gap-2 min-w-max">
+                <!-- 行政区按钮将通过JavaScript动态生成 -->
+            </div>
+        </div>
+
+        <!-- 主操作区 -->
+        <div class="p-4 space-y-4">
+            
+            <!-- 当前选中区域提示 -->
+            <div class="text-sm text-gray-500 flex items-center justify-between">
+                <span>当前区域：<span id="current-district" class="font-bold text-gray-800">罗湖区</span></span>
+                <span id="district-count" class="text-xs bg-gray-200 px-2 py-1 rounded">共 0 个片区</span>
+            </div>
+
+            <!-- 二级筛选容器：搜索框 + 片区下拉 -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 space-y-4">
+                
+                <!-- 搜索框 -->
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i data-lucide="search" class="w-4 h-4 text-gray-400"></i>
+                    </div>
+                    <input
+                        id="search-input"
+                        type="text"
+                        class="block w-full pl-10 pr-10 py-3 border border-gray-200 rounded-lg leading-5 bg-gray-50 placeholder-gray-400 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+                        placeholder="输入小区名 (如: 华润...)"
+                    />
+                    <button 
+                        id="clear-search"
+                        class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 hidden"
+                    >
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div class="relative flex items-center justify-center">
+                    <div class="border-t border-gray-200 w-full"></div>
+                    <span class="bg-white px-3 text-xs text-gray-400">或者按片区查看</span>
+                    <div class="border-t border-gray-200 w-full"></div>
+                </div>
+
+                <!-- 片区下拉框 -->
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-gray-400"></i>
+                    </div>
+                    <select
+                        id="pianqu-select"
+                        class="block w-full pl-10 pr-10 py-3 text-base border-gray-200 bg-gray-50 border sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 appearance-none"
+                    >
+                        <option value="">-- 选择片区浏览 --</option>
+                        <!-- 片区选项将通过JavaScript动态生成 -->
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 结果展示区 -->
+            <div id="results-container" class="mt-6">
+                <!-- 结果将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- 先加载数据文件 -->
+    <script src="data.js"></script>
+    
+    <!-- 应用逻辑 -->
+    <script>
+        // 应用状态
+        let appState = {
+            selectedDistrict: '罗湖区',
+            selectedPianqu: '',
+            searchText: '',
+            searchFocused: false
+        };
+
+        // 获取数据函数
+        function getHousingData() {
+            return window.SZ_HOUSING_DATA || {};
+        }
+
+        // 初始化应用
+        function initApp() {
+            // 初始化Lucide图标
+            lucide.createIcons();
+            
+            // 渲染行政区标签
+            renderDistrictTabs();
+            
+            // 绑定事件
+            bindEvents();
+            
+            // 初始渲染
+            updateUI();
+        }
+
+        // 渲染行政区标签
+        function renderDistrictTabs() {
+            const districts = Object.keys(getHousingData());
+            const tabsContainer = document.getElementById('district-tabs');
+            
+            tabsContainer.innerHTML = districts.map(district => `
+                <button
+                    data-district="${district}"
+                    class="px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                        appState.selectedDistrict === district
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }"
+                >
+                    ${district}
+                </button>
+            `).join('');
+        }
+
+        // 绑定事件
+        function bindEvents() {
+            // 行政区标签点击事件
+            document.getElementById('district-tabs').addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const district = e.target.dataset.district;
+                    handleDistrictChange(district);
+                }
+            });
+
+            // 搜索框事件
+            const searchInput = document.getElementById('search-input');
+            searchInput.addEventListener('input', (e) => {
+                handleSearchInput(e.target.value);
+            });
+            searchInput.addEventListener('focus', () => {
+                appState.searchFocused = true;
+                updateSearchUI();
+            });
+            searchInput.addEventListener('blur', () => {
+                appState.searchFocused = false;
+                updateSearchUI();
+            });
+
+            // 清除搜索按钮
+            document.getElementById('clear-search').addEventListener('click', () => {
+                handleSearchInput('');
+                searchInput.value = '';
+                searchInput.focus();
+            });
+
+            // 片区选择事件
+            document.getElementById('pianqu-select').addEventListener('change', (e) => {
+                handlePianquChange(e.target.value);
+            });
+        }
+
+        // 处理行政区变更
+        function handleDistrictChange(district) {
+            appState.selectedDistrict = district;
+            appState.selectedPianqu = '';
+            appState.searchText = '';
+            document.getElementById('search-input').value = '';
+            document.getElementById('pianqu-select').value = '';
+            updateUI();
+        }
+
+        // 处理搜索输入
+        function handleSearchInput(value) {
+            appState.searchText = value;
+            if (value.length > 0) {
+                appState.selectedPianqu = '';
+                document.getElementById('pianqu-select').value = '';
+            }
+            updateUI();
+        }
+
+        // 处理片区变更
+        function handlePianquChange(value) {
+            appState.selectedPianqu = value;
+            appState.searchText = '';
+            document.getElementById('search-input').value = '';
+            updateUI();
+        }
+
+        // 更新搜索UI
+        function updateSearchUI() {
+            const clearButton = document.getElementById('clear-search');
+            const searchIcon = document.querySelector('[data-lucide="search"]');
+            
+            if (appState.searchText) {
+                clearButton.classList.remove('hidden');
+            } else {
+                clearButton.classList.add('hidden');
+            }
+            
+            if (appState.searchFocused) {
+                searchIcon.classList.remove('text-gray-400');
+                searchIcon.classList.add('text-blue-500');
+            } else {
+                searchIcon.classList.remove('text-blue-500');
+                searchIcon.classList.add('text-gray-400');
+            }
+        }
+
+        // 获取显示列表
+        function getDisplayList() {
+            const districtData = getHousingData()[appState.selectedDistrict] || [];
+            
+            // 搜索模式
+            if (appState.searchText.trim().length >= 1) {
+                const keyword = appState.searchText.trim().toLowerCase();
+                let results = [];
+                
+                districtData.forEach(pianqu => {
+                    const matchedEstates = pianqu.estates.filter(estate => 
+                        estate.toLowerCase().includes(keyword)
+                    );
+                    
+                    matchedEstates.forEach(estate => {
+                        results.push({
+                            estateName: estate,
+                            pianquName: pianqu.name,
+                            matchType: 'search'
+                        });
+                    });
+                });
+                return results;
+            }
+            
+            // 片区筛选模式
+            if (appState.selectedPianqu) {
+                const targetPianqu = districtData.find(p => p.name === appState.selectedPianqu);
+                if (targetPianqu) {
+                    return targetPianqu.estates.map(estate => ({
+                        estateName: estate,
+                        pianquName: targetPianqu.name,
+                        matchType: 'filter'
+                    }));
+                }
+            }
+            
+            return [];
+        }
+
+        // 更新UI
+        function updateUI() {
+            // 更新当前区域显示
+            document.getElementById('current-district').textContent = appState.selectedDistrict;
+            
+            // 更新片区数量
+            const districtData = getHousingData()[appState.selectedDistrict] || [];
+            document.getElementById('district-count').textContent = `共 ${districtData.length} 个片区`;
+            
+            // 更新片区下拉选项
+            const select = document.getElementById('pianqu-select');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">-- 选择片区浏览 --</option>' + 
+                districtData.map(pianqu => 
+                    `<option value="${pianqu.name}" ${pianqu.name === currentValue ? 'selected' : ''}>${pianqu.name}</option>`
+                ).join('');
+            
+            // 更新搜索UI
+            updateSearchUI();
+            
+            // 渲染结果
+            renderResults();
+            
+            // 重新渲染行政区标签（更新选中状态）
+            renderDistrictTabs();
+        }
+
+        // 渲染结果
+        function renderResults() {
+            const container = document.getElementById('results-container');
+            const displayList = getDisplayList();
+            
+            // 状态 A: 初始空状态
+            if (!appState.searchText && !appState.selectedPianqu) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-gray-400">
+                        <div class="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <i data-lucide="search" class="w-6 h-6 opacity-50"></i>
+                        </div>
+                        <p>请选择片区或输入关键词进行查询</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+            
+            // 状态 B: 搜索字数不足
+            if (appState.searchText && appState.searchText.length < 1) {
+                container.innerHTML = `
+                    <div class="text-center py-4 text-orange-500 text-sm bg-orange-50 rounded-lg">
+                        请输入至少 1 个字符进行精确匹配
+                    </div>
+                `;
+                return;
+            }
+            
+            // 状态 C: 无结果
+            if ((appState.searchText.length >= 1 || appState.selectedPianqu) && displayList.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-gray-500">
+                        <p>在该区域下未找到相关小区</p>
+                        <p class="text-xs text-gray-400 mt-1">试着切换行政区或者缩短搜索词</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // 状态 D: 有结果
+            container.innerHTML = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 bg-gray-50 border-b border-gray-200">
+                        <span class="text-sm text-gray-600">
+                            找到 <span class="font-bold text-blue-600">${displayList.length}</span> 个小区
+                        </span>
+                    </div>
+                    <div class="max-h-96 overflow-y-auto">
+                        <ul class="divide-y divide-gray-100">
+                            ${displayList.map(item => `
+                                <li class="p-4 hover:bg-gray-50 transition-colors">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <h3 class="font-medium text-gray-900">${item.estateName}</h3>
+                                            <p class="text-sm text-gray-500 mt-1">
+                                                <i data-lucide="map-pin" class="w-3 h-3 inline mr-1"></i>
+                                                ${item.pianquName}
+                                            </p>
+                                        </div>
+                                        ${item.matchType === 'search' ? `
+                                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                                搜索匹配
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        // 页面加载完成后初始化应用
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
