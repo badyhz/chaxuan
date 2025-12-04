@@ -1,0 +1,16 @@
+{
+  "name": "sz-housing-data",
+  "version": "1.0.0",
+  "description": "深圳住房数据展示应用",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
